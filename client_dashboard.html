@@ -243,10 +243,13 @@ async function fetchAndCachePins() {
   const cfg  = parseSyncCode(code || '');
   if (!cfg) return null;
   try {
-    const res = await fetch(`https://api.jsonbin.io/v3/b/${cfg.id}/latest`,
-      { headers: {'X-Master-Key': cfg.key, 'X-Bin-Meta': 'false'}, signal: AbortSignal.timeout(8000) });
+    const res = await fetch(`https://api.github.com/gists/${cfg.id}`,
+      { headers: {'Authorization': `Bearer ${cfg.key}`, 'Accept': 'application/vnd.github+json'}, signal: AbortSignal.timeout(8000) });
     if (!res.ok) return null;
-    const S = await res.json();
+    const gist = await res.json();
+    const content = gist.files?.['portfolio.json']?.content;
+    if (!content) return null;
+    const S = JSON.parse(content);
     cachePinHashes(S);
     return cfg;
   } catch { return null; }
@@ -423,11 +426,14 @@ async function loadData() {
   }
   try {
     const [dataRes, liveFX] = await Promise.all([
-      fetch(`https://api.jsonbin.io/v3/b/${cfg.id}/latest`,{headers:{'X-Master-Key':cfg.key,'X-Bin-Meta':'false'}}),
+      fetch(`https://api.github.com/gists/${cfg.id}`,{headers:{'Authorization':`Bearer ${cfg.key}`,'Accept':'application/vnd.github+json'}}),
       fetchLiveFX()
     ]);
     if (!dataRes.ok) throw new Error('HTTP '+dataRes.status);
-    const S = await dataRes.json();
+    const gist = await dataRes.json();
+    const raw  = gist.files?.['portfolio.json']?.content;
+    if (!raw) throw new Error('No portfolio data in gist');
+    const S = JSON.parse(raw);
     if (liveFX) S._liveFX = liveFX;
     cachePinHashes(S); // refresh cached PIN hashes in case Dam changed them
     renderDash(S);
@@ -610,8 +616,19 @@ function renderDash(S) {
 }
 
 // ════════════════════════════════════════════════════════
+//  CLIENT AUTO-SYNC
+//  ← Dam ใส่ Sync Code ที่นี่ก่อนส่งให้ client
+//    client จะ auto-connect โดยไม่ต้องกรอกเอง
+// ════════════════════════════════════════════════════════
+const CLIENT_AUTO_SYNC = 'Z2hwX1VRZEtheFdPV1dJTm1HS0U0OUpFNjRVaGxkZ2RjNTFRZ0dXS3x8fGIwZGFhNjY0ZDUzMzM1MTJkNzY1MGNhYWJkYzIxNTNi';
+
+// ════════════════════════════════════════════════════════
 //  INIT
 // ════════════════════════════════════════════════════════
+// Auto-fill sync code if embedded and not yet saved
+if (CLIENT_AUTO_SYNC && !getSyncCode()) {
+  ls.set('cl_sync', CLIENT_AUTO_SYNC);
+}
 renderProfileList();
 </script>
 </body>
